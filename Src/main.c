@@ -11,10 +11,9 @@ void delay(volatile uint32_t count) {
 void _init(void) {}
 
 int main(void) {
-    // 1. Enable the clock for GPIOA
-    // The GPIOA peripheral is on the AHB2 bus.
-    // We need to set the GPIOAEN bit in the RCC_AHB2ENR register.
-    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+    // 1. Enable the clocks for GPIOA (LED) and GPIOC (User button)
+    // Both peripherals are on the AHB2 bus.
+    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOCEN;
 
     // 2. Configure GPIO Pin PA5 as Output
     // The mode is configured in the GPIOx_MODER register.
@@ -29,15 +28,29 @@ int main(void) {
     // GPIOA->OTYPER &= ~GPIO_OTYPER_OT5; // Output push-pull (default)
     // GPIOA->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED5; // Low speed (default)
 
-    while (1) {
-        // A safer way is to use the atomic Bit Set/Reset Register (BSRR)
-        // Set PA5 high (turn on LED)
-        GPIOA->BSRR = GPIO_BSRR_BS5;
-        delay(500000);
+    // 3. Configure GPIO Pin PC13 as Input for the user button
+    GPIOC->MODER &= ~GPIO_MODER_MODE13_Msk; // 00: Input mode
 
-        // Set PA5 low (turn off LED)
-        GPIOA->BSRR = GPIO_BSRR_BR5;
-        delay(500000);
+    uint8_t led_on = 0;
+    while (1) {
+        // Poll the user button on PC13 (active high)
+        if (GPIOC->IDR & GPIO_IDR_ID13) {
+            // Simple debounce delay
+            delay(10000);
+            // Confirm button is still pressed
+            if (GPIOC->IDR & GPIO_IDR_ID13) {
+                // Wait for button release
+                while (GPIOC->IDR & GPIO_IDR_ID13);
+
+                // Toggle LED state
+                led_on ^= 1;
+                if (led_on) {
+                    GPIOA->BSRR = GPIO_BSRR_BS5;
+                } else {
+                    GPIOA->BSRR = GPIO_BSRR_BR5;
+                }
+            }
+        }
     }
 
     return 0; // Should never be reached
